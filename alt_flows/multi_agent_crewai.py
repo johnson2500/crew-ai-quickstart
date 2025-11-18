@@ -6,6 +6,7 @@ from crewai.tools import BaseTool # type: ignore
 from typing import Type
 from pydantic import BaseModel, Field # type: ignore
 from llama_stack_client import LlamaStackClient # type: ignore
+from lib.llama_stack_llm import LlamaStackLLM
 
 # --- Initialize Llama Stack Client ---
 client = LlamaStackClient(
@@ -86,6 +87,7 @@ weather_agent = Agent(
     tools=[GetWeatherTool()],
     verbose=True,
     allow_delegation=False,
+    llm=LlamaStackLLM(model_name="ollama/llama3.2:3b")
 )
 
 activity_agent = Agent(
@@ -95,6 +97,7 @@ activity_agent = Agent(
     tools=[SuggestActivityTool()],
     verbose=True,
     allow_delegation=False,
+    llm=LlamaStackLLM(model_name="ollama/llama3.2:3b")
 )
 
 news_agent = Agent(
@@ -104,6 +107,7 @@ news_agent = Agent(
     tools=[GetNewsTool()],
     verbose=True,
     allow_delegation=False,
+    llm=LlamaStackLLM(model_name="ollama/llama3.2:3b")
 )
 
 coordinator_agent = Agent(
@@ -112,6 +116,7 @@ coordinator_agent = Agent(
     backstory="You are a coordinator who synthesizes information from weather specialists, activity planners, and news reporters to provide complete answers to user queries.",
     verbose=True,
     allow_delegation=True,  # Can delegate to other agents
+    llm=LlamaStackLLM(model_name="ollama/llama3.2:3b")
 )
 
 

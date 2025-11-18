@@ -13,6 +13,7 @@ from lib.models import ChatRequest, ChatResponse, IngestResponse
 from lib.logger import logger
 from lib.prompts import RAG_SYSTEM_PROMPT, RAG_NO_CONTEXT_PROMPT, NORMAL_SYSTEM_PROMPT
 from config import LLAMA_STACK_URL, KNOWLEDGE_FOLDER, VECTOR_DB_ID, SESSION_STORAGE
+from lib.llama_stack_client import LlamaClient
 
 # Ensure knowledge folder exists
 os.makedirs(KNOWLEDGE_FOLDER, exist_ok=True)
@@ -28,14 +29,6 @@ try:
 except Exception as e:
     logger.info(f"SDK Connection Error: {e}")
     client = None
-
-def get_client():
-    client = LlamaStackClient(base_url=LLAMA_STACK_URL)
-    logger.info(f"Connected to Llama Stack at {LLAMA_STACK_URL}")
-    # Print out the client attributes to see what is actually available
-    # I fing using rest api for now because the sdk is not working
-    logger.info(f"DEBUG: Client Attributes: {[x for x in dir(client) if not x.startswith('_')]}")
-    return client
 
 def raw_chat_completion(model_id: str, messages: List[Dict]):
     """Direct HTTP call to Llama Stack Inference API."""
@@ -197,6 +190,7 @@ def perform_manual_rag(query: str) -> str:
         logger.info("🔄 Attempting RAG query via rag_tool.query (REST API)")
         logger.info(f"🔑 Using Vector Store ID: {VECTOR_DB_ID}")
         try:
+            logger.info("Sending RAG Query to REST API")
             results = requests.post(
                 f"{LLAMA_STACK_URL}/v1/tool-runtime/rag-tool/query",
                 json={"content": query, "vector_store_ids": [VECTOR_DB_ID]},

@@ -4,7 +4,8 @@ from llama_stack_client import LlamaStackClient
 import logging
 # --- 1. Define Your Local Tools ---
 # These are the functions your agent can "Act" with.
-from shared import get_llama_stack_client, get_function_specifications, get_tool_registry
+
+from alt_flows.shared import get_llama_stack_client, get_function_specifications, get_tool_registry
 
 logger = logging.getLogger(__name__)
 
@@ -146,4 +147,3 @@ def run_agentic_workflow(user_prompt: str, model: str = "ollama/llama3.2:3b"):
             })
             logger.info(f"--- AGENT Observation: {tool_result} ---")
 
-run_agentic_workflow("What's the weather in Boston and what's a good outdoor activity and what's the news in Boston?")
