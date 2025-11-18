@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+python-multipart
+streamlit
+requests
+pydantic
+llama-stack-client
