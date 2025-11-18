@@ -9,34 +9,33 @@ from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from llama_stack_client import LlamaStackClient
-from lib.models import ChatRequest, ChatResponse, IngestResponse, VerifyResponse
+from lib.models import ChatRequest, ChatResponse, IngestResponse
 from lib.logger import logger
 from lib.prompts import RAG_SYSTEM_PROMPT, RAG_NO_CONTEXT_PROMPT, NORMAL_SYSTEM_PROMPT
-
-# --- Configuration ---
-LLAMA_STACK_URL = os.getenv("LLAMA_STACK_URL", "http://localhost:8321")
-KNOWLEDGE_FOLDER = "./knowledge"
-VECTOR_DB_ID = "vs_0eb3e18c-553f-4254-b0b2-9dd830ea1146"
-
-# In-memory session storage
-SESSION_STORAGE: Dict[str, List[Dict[str, str]]] = {}
+from config import LLAMA_STACK_URL, KNOWLEDGE_FOLDER, VECTOR_DB_ID, SESSION_STORAGE
 
 # Ensure knowledge folder exists
 os.makedirs(KNOWLEDGE_FOLDER, exist_ok=True)
 
 app = FastAPI(title="Llama Stack RAG Backend")
 
-# Initialize SDK Client (Best effort)
 try:
     client = LlamaStackClient(base_url=LLAMA_STACK_URL)
     logger.info(f"Connected to Llama Stack at {LLAMA_STACK_URL}")
-    # Debugging: logger.info attributes to see what is actually available
+    # Print out the client attributes to see what is actually available
+    # I fing using rest api for now because the sdk is not working
     logger.info(f"DEBUG: Client Attributes: {[x for x in dir(client) if not x.startswith('_')]}")
 except Exception as e:
     logger.info(f"SDK Connection Error: {e}")
     client = None
 
-# --- Helper Functions: Raw HTTP Fallbacks ---
+def get_client():
+    client = LlamaStackClient(base_url=LLAMA_STACK_URL)
+    logger.info(f"Connected to Llama Stack at {LLAMA_STACK_URL}")
+    # Print out the client attributes to see what is actually available
+    # I fing using rest api for now because the sdk is not working
+    logger.info(f"DEBUG: Client Attributes: {[x for x in dir(client) if not x.startswith('_')]}")
+    return client
 
 def raw_chat_completion(model_id: str, messages: List[Dict]):
     """Direct HTTP call to Llama Stack Inference API."""
@@ -207,29 +206,30 @@ def perform_manual_rag(query: str) -> str:
             logger.info(f"Raw RAG Query Response: {data}")
             
             # Parse the response - rag_tool.query may return content directly or in chunks
-            if isinstance(data, dict):
-                # Check for content field
-                if data.get("content"):
+            if not isinstance(data, dict):
+                logger.warning("RAG query returned non-dict response")
+            elif "chunks" in data and data["chunks"]:
+                # Extract content from chunks
+                items = data["chunks"] if isinstance(data["chunks"], list) else [data["chunks"]]
+                for item in items:
+                    if isinstance(item, dict):
+                        text = item.get("content") or item.get("text", "")
+                    else:
+                        text = str(item)
+                    if text:
+                        context_parts.append(text)
+            elif "content" in data:
+                # Extract direct content field
+                if data["content"]:
                     context_parts.append(data["content"])
-                # Check for chunks field
-                elif data.get("chunks"):
-                    items = data["chunks"] if isinstance(data["chunks"], list) else [data["chunks"]]
-                    for item in items:
-                        if isinstance(item, dict):
-                            text = item.get("content", "") or item.get("text", "")
-                        else:
-                            text = str(item)
-                        if text:
-                            context_parts.append(text)
-                # Check if data itself is the content
-                elif "content" in data and data["content"] is None:
-                    logger.warning("⚠️  RAG query returned empty content")
                 else:
-                    # Try to extract any text content from the response
-                    for key in ["content", "text", "message", "result"]:
-                        if key in data and data[key]:
-                            context_parts.append(str(data[key]))
-                            break
+                    logger.warning("RAG query returned empty content")
+            else:
+                # Fallback: try other common response keys
+                for key in ["text", "message", "result"]:
+                    if key in data and data[key]:
+                        context_parts.append(str(data[key]))
+                        break
         except Exception as e:
             logger.error(f"RAG query failed: {e}")
             import traceback
@@ -452,6 +452,9 @@ def chat_endpoint(request: ChatRequest):
     # 4. Update History
     history.append({"role": "user", "content": request.message})
     history.append({"role": "assistant", "content": bot_content})
+    logger.info(f"History: {history}")
+    logger.info(f"Session ID: {session_id}")
+    logger.info(f"Bot Content: {bot_content}")
     SESSION_STORAGE[session_id] = history
 
     return ChatResponse(response=bot_content, session_id=session_id)
@@ -488,43 +491,9 @@ def ingest_knowledge():
         
         # Strategy: Try SDK Tool -> SDK VectorIO -> REST
         ingested = False
-        
-        # 1. SDK Tool Runtime (Preferred method for document ingestion)
-        if not ingested:
-            try:
-                url = f"{LLAMA_STACK_URL}/v1/tool-runtime/rag-tool/insert"
-                logger.info(f"📤 Ingesting to Vector Store ID: {VECTOR_DB_ID} at {url}")
-                logger.debug(f"Documents: {documents}")
-                payload = {
-                    "documents": documents,
-                    "vector_store_id": VECTOR_DB_ID,
-                    "chunk_size_in_tokens": 512,
-                }
-                response = requests.post(url, json=payload)
 
-                if response.status_code == 200:
-                    ingested = True
-                    logger.info(f"Successfully ingested {len(documents)} documents via rag_tool.insert")
-                else:
-                    logger.error(f"Failed to ingest documents: {response.status_code} {response.text}")
-                # import pdb; pdb.set_trace()
-                ingested = True
-            except Exception as e:
-                logger.error(f"Failed to ingest documents: {e}")
-
-        # 2. SDK Vector IO (requires chunks format, not documents)
-        # Note: vector_io.insert expects 'chunks' parameter, not 'documents'
-        # We'll skip this since rag_tool.insert is the preferred method for documents
-        # If rag_tool fails, we fall back to REST API which handles documents
-        if not ingested and client and hasattr(client, 'vector_io'):
-            try:
-                # Convert documents to chunks format if needed
-                # For now, we'll rely on REST fallback which handles documents natively
-                logger.info("Note: Skipping vector_io.insert (requires chunks format). Using REST fallback.")
-            except: pass
-            
-        # 3. Raw REST
         if not ingested:
+            logger.info("Using REST API to ingest documents")
             raw_ingest_documents(documents)
 
         logger.info(f"✅ Ingestion completed - {len(documents)} files processed")
@@ -534,45 +503,21 @@ def ingest_knowledge():
         traceback.logger.info_exc()
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
 
-@app.get("/verify", response_model=VerifyResponse)
-def verify_knowledge(query: str = "llamas"):
+@app.get("/files-in-vector-db", response_model=List[str])
+def files_in_vector_db():
     """
-    Verify that specific content can be retrieved from the knowledge base.
-    Useful for testing if ingested data is actually searchable.
-    
-    Example queries for working_llama_stack_command.txt:
-    - "llamas walk" or "cannot walk"
-    - "llamas fart" 
-    - "llamas poop" or "upside down"
-    - "llamas" (general)
+    Get the files in the vector database (knowledge folder).
+    Returns only .txt and .md files.
     """
-    logger.info(f"🔍 Verification query: '{query}'")
+    if not os.path.exists(KNOWLEDGE_FOLDER):
+        return []
     
-    # Use the same RAG function to search
-    context_str = perform_manual_rag(query)
+    files_and_directories = os.listdir(KNOWLEDGE_FOLDER)
+    # Filter for only .txt and .md files
+    files = [
+        f for f in files_and_directories 
+        if os.path.isfile(os.path.join(KNOWLEDGE_FOLDER, f)) 
+        and f.endswith(('.txt', '.md'))
+    ]
     
-    # Extract chunks from the context string
-    chunks = []
-    if context_str:
-        if "Relevant Context from Knowledge Base:" in context_str:
-            try:
-                content_section = context_str.split("Relevant Context from Knowledge Base:")[1].split("---")[0].strip()
-                if content_section:
-                    if "\n\n" in content_section:
-                        potential_chunks = [p.strip() for p in content_section.split("\n\n") if p.strip()]
-                        chunks = potential_chunks[:5]
-                    else:
-                        chunks = [content_section[:500]]
-            except Exception as e:
-                logger.warning(f"Could not parse chunks from context: {e}")
-                chunks = [context_str[:500]]  # Fallback: show first 500 chars
-    
-    found = len(chunks) > 0
-    logger.info(f"{'✅' if found else '❌'} Verification result: {'Found' if found else 'Not found'} - {len(chunks)} chunks")
-    
-    return VerifyResponse(
-        found=found,
-        query=query,
-        chunks_found=len(chunks),
-        sample_chunks=chunks
-    )
+    return sorted(files)
