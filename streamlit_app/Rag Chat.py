@@ -19,18 +19,18 @@ def set_session_state():
     if "available_models" not in st.session_state:
         try:
             models = chat_client.get_models()
-            st.session_state.available_models = models if models else ["meta-llama/Llama-3.1-8B-Instruct"]
+            st.session_state.available_models = models if models else ["ollama/llama3.1"]
         except Exception as e:
-            st.session_state.available_models = ["meta-llama/Llama-3.1-8B-Instruct"]  # Fallback model
+            st.session_state.available_models = ["ollama/llama3.1"]  # Fallback model
             st.error(f"Failed to fetch models: {e}")
-    # Initialize selected_model in session state if not present
+
     if "selected_model" not in st.session_state:
         if st.session_state.available_models and len(st.session_state.available_models) > 0:
             # Use first model, but skip connection error messages
             valid_models = [m for m in st.session_state.available_models if not m.startswith("Connection Error")]
             st.session_state.selected_model = valid_models[0] if valid_models else st.session_state.available_models[0]
         else:
-            st.session_state.selected_model = "meta-llama/Llama-3.1-8B-Instruct"
+            st.session_state.selected_model = "ollama/llama3.1"
     if "use_rag" not in st.session_state:
         st.session_state.use_rag = False
 
@@ -45,7 +45,7 @@ def create_sidebar_settings():
         # Filter out connection error messages from model list
         valid_models = [m for m in st.session_state.available_models if not m.startswith("Connection Error")]
         if not valid_models:
-            valid_models = ["meta-llama/Llama-3.1-8B-Instruct"]
+            valid_models = ["ollama/llama3.1"]
         
         # Find current model index or default to 0
         current_index = 0

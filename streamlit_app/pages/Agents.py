@@ -15,8 +15,8 @@ logger = logging.getLogger(__name__)
 # Import API clients
 try:
     from streamlit_app.lib.clients.crew_client import CrewClient
-    from streamlit_app.lib.clients.task_client import TaskClient, TaskBase
-    from streamlit_app.lib.clients.agent_client import AgentClient, AgentBase
+    from streamlit_app.lib.clients.task_client import TaskClient
+    from streamlit_app.lib.clients.agent_client import AgentClient
     API_CLIENTS_AVAILABLE = True
 except ImportError as e:
     API_CLIENTS_AVAILABLE = False
@@ -296,7 +296,7 @@ def create_task_management_ui():
         return
     
     # Create tabs for different sections
-    tab1, tab2, tab3, tab4 = st.tabs(["View Tasks", "View Agents", "Launch Task", "Create Task"])
+    tab1, tab2, tab3 = st.tabs(["View Tasks", "View Agents", "Launch Task"])
     
     # Tab 1: View Tasks
     with tab1:
@@ -416,77 +416,7 @@ def create_task_management_ui():
         except Exception as e:
             st.error(f"Failed to load tasks/agents: {e}")
             st.info("Make sure the FastAPI server is running.")
-    
-    # Tab 4: Create Task
-    with tab4:
-        st.subheader("Create New Task")
-        try:
-            # Get available agents for selection
-            agents = agent_client.get_agents()
-            
-            if not agents:
-                st.warning("No agents available. Please create an agent first in the 'Create Agent' page.")
-            else:
-                with st.form("create_task_form"):
-                    task_name = st.text_input("Task Name", placeholder="e.g., Research Market Trends")
-                    task_description = st.text_area(
-                        "Task Description",
-                        placeholder="e.g., Research and analyze current market trends in the technology sector",
-                        height=100
-                    )
-                    
-                    # Agent selection
-                    agent_options = {f"{agent.role} (ID: {agent.id})": agent.id for agent in agents}
-                    selected_agent_display = st.selectbox(
-                        "Assign Agent",
-                        options=list(agent_options.keys())
-                    )
-                    selected_agent_id = agent_options[selected_agent_display]
-                    
-                    expected_output = st.text_area(
-                        "Expected Output",
-                        placeholder="e.g., A comprehensive report on market trends with key insights",
-                        height=100
-                    )
-                    
-                    # Dependencies (optional)
-                    tasks = task_client.get_tasks()
-                    if tasks:
-                        dependency_options = {f"{task.name} (ID: {task.id})": task.id for task in tasks}
-                        selected_dependencies = st.multiselect(
-                            "Task Dependencies (optional)",
-                            options=list(dependency_options.keys())
-                        )
-                        dependency_ids = [dependency_options[dep] for dep in selected_dependencies]
-                    else:
-                        dependency_ids = []
-                    
-                    submitted = st.form_submit_button("Create Task", type="primary")
-                    
-                    if submitted:
-                        if not task_name or not task_description or not expected_output:
-                            st.error("Please fill in all required fields.")
-                        else:
-                            try:
-                                new_task = TaskBase(
-                                    name=task_name,
-                                    description=task_description,
-                                    agent_id=selected_agent_id,
-                                    expected_output=expected_output,
-                                    dependencies=dependency_ids
-                                )
-                                created_task = task_client.create_task(new_task)
-                                st.success(f"✅ Task '{created_task.name}' created successfully!")
-                                st.info(f"Task ID: {created_task.id}")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Failed to create task: {e}")
-                                import traceback
-                                with st.expander("View Error Details"):
-                                    st.code(traceback.format_exc(), language='python')
-        except Exception as e:
-            st.error(f"Failed to load agents: {e}")
-            st.info("Make sure the FastAPI server is running.")
+            st.info("💡 **Tip:** To create new tasks, go to the 'Create Agent' page.")
 
 def create_main_ui():
     """Create the main agent triggering UI."""
