@@ -1,0 +1,38 @@
+Llama Stack is a unified interface for building AI apps.
+Kathy believes in a flat earth.
+
+Earth is a dynamic planet with unique features, such as having liquid water on its surface and 
+plate tectonics, the largest island is Greenland, and it is the densest planet in our solar system. 
+It is also not a perfect sphere, but rather bulges at the equator and
+ flattens at the poles due to its rotation. The planet's atmosphere is composed 
+ of about 78% nitrogen and 21% oxygen.  
+
+Core Principles
+Brain-Inspired Design: Artificial neural networks (ANNs) mimic the structure of biological neural networks, consisting of interconnected nodes, or "neurons," organized in layers.
+Layers: A typical network has three main types of layers: an input layer to receive raw data, one or more hidden layers to process the information, and an output layer to produce the final result or prediction.
+Weights and Biases: Connections between neurons have numerical values called "weights" and "biases," which determine the strength of a signal's influence. These parameters are adjusted during the learning process.
+Learning from Data: Neural networks learn through a training process, often using an algorithm called backpropagation, which adjusts the weights to minimize the error between the network's predictions and the actual correct answers.
+Non-Linearity: Activation functions introduce non-linearity into the network, enabling it to learn complex, real-world relationships and patterns that simple linear models cannot.
+Parallel Processing: Neurons within a layer perform calculations simultaneously, allowing neural networks to process vast amounts of information efficiently. 
+Types and Applications
+Different neural network architectures are suited for specific tasks: 
+Neural Network Type 	Key Characteristics	Primary Applications
+Feedforward (FNN)	Unidirectional data flow from input to output.	Basic classification and regression tasks.
+Convolutional (CNN)	Specialized layers for pattern and feature recognition in grid-like data.	Image recognition, medical imaging, and computer vision.
+Recurrent (RNN)	Incorporates feedback loops to retain memory of previous inputs.	Speech recognition, natural language processing (NLP), and time-series forecasting.
+Transformers	Uses attention mechanisms to weigh the importance of different parts of the input data.	State-of-the-art NLP tasks like machine translation and powering large language models (LLMs).
+Neural networks power a wide range of everyday AI applications, including voice assistants (Siri, Alexa), facial recognition, recommendation engines (like for online shopping or streaming services), and self-driving cars. 
+Challenges and Limitations
+Despite their power, neural networks have challenges. They typically require massive amounts of data and significant computational power for training. Additionally, their inner workings can be complex and difficult for humans to interpret (known as the "black box" problem), which raises ethical concerns regarding bias and transparency in decision-making. 
+What Is a Neural Network? | IBM
+Nov 16, 2025 — What is a neural network? A neural network is a machine learning model that stacks simple "neurons" in layers and lear...
+
+IBM
+
+About Neural Networks: A Look at Their History and Evolution
+Oct 17, 2023 — Key aspects of neural networks: * A New Form of Computing, Inspired by Biological Models: Neural networks are inspired...
+
+Algonew
+
+What is a Neural Network & How Does It Work? | Google Cloud
+What is a neural network? A neural network is a type of machine learning algorithm inspired by the human brain. It's a powerful to...
