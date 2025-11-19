@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 
 # Add parent directory to path to import alt_flows modules
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 # Configure logging to capture agent output
 logging.basicConfig(level=logging.INFO)
@@ -14,21 +14,21 @@ logger = logging.getLogger(__name__)
 
 # Import agent workflows (with optional imports for dependencies)
 try:
-    from alt_flows.multi_agent import run_agentic_workflow
+    from API.alt_flows.multi_agent import run_agentic_workflow
     MULTI_AGENT_AVAILABLE = True
 except ImportError as e:
     MULTI_AGENT_AVAILABLE = False
     logger.warning(f"Multi-agent workflow not available: {e}")
 
 try:
-    from alt_flows.multi_agent_crewai import run_crewai_workflow
+    from API.alt_flows.multi_agent_crewai import run_crewai_workflow
     CREWAI_AVAILABLE = True
 except ImportError as e:
     CREWAI_AVAILABLE = False
     logger.warning(f"CrewAI workflow not available: {e}")
 
 try:
-    from alt_flows.main import agent_1, agent_2
+    from API.alt_flows.main import agent_1, agent_2
     LLAMA_STACK_AGENTS_AVAILABLE = True
 except ImportError as e:
     LLAMA_STACK_AGENTS_AVAILABLE = False
