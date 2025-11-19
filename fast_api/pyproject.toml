@@ -4,6 +4,8 @@ version = "0.1.0"
 description = "Llama Stack agents project"
 requires-python = ">=3.10"
 dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
     "llama-stack",
     "ollama",  # For Ollama inference provider
     "together",  # For Together AI provider

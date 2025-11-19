@@ -6,7 +6,7 @@ from crewai.tools import BaseTool # type: ignore
 from typing import Type
 from pydantic import BaseModel, Field # type: ignore
 from llama_stack_client import LlamaStackClient # type: ignore
-from API.lib.llama_stack_llm import LlamaStackLLM
+from fast_api.lib.llama_stack_llm import LlamaStackLLM
 
 # --- Initialize Llama Stack Client ---
 client = LlamaStackClient(

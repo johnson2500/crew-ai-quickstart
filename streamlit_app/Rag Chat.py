@@ -1,14 +1,14 @@
 import streamlit as st
-import requests
-import uuid
+import os
+from lib.clients.chat_client import ChatClient
 
 # --- Config ---
-API_URL = "http://localhost:8000"
+API_URL = os.getenv("FASTAPI_BASE_URL", "http://localhost:8001")
 
 st.set_page_config(page_title="RAG Chat", layout="wide")
 
-selected_model = None
-use_rag = False
+# Initialize chat client
+chat_client = ChatClient(base_url=API_URL)
 
 def set_session_state():
     # --- Session State ---
@@ -18,13 +18,21 @@ def set_session_state():
         st.session_state.session_id = None
     if "available_models" not in st.session_state:
         try:
-            res = requests.get(f"{API_URL}/models")
-            if res.status_code == 200:
-                st.session_state.available_models = res.json()
-            else:
-                st.session_state.available_models = ["meta-llama/Llama-3.1-8B-Instruct"]
-        except:
-            st.session_state.available_models = ["Connection Error"]
+            models = chat_client.get_models()
+            st.session_state.available_models = models if models else ["meta-llama/Llama-3.1-8B-Instruct"]
+        except Exception as e:
+            st.session_state.available_models = ["meta-llama/Llama-3.1-8B-Instruct"]  # Fallback model
+            st.error(f"Failed to fetch models: {e}")
+    # Initialize selected_model in session state if not present
+    if "selected_model" not in st.session_state:
+        if st.session_state.available_models and len(st.session_state.available_models) > 0:
+            # Use first model, but skip connection error messages
+            valid_models = [m for m in st.session_state.available_models if not m.startswith("Connection Error")]
+            st.session_state.selected_model = valid_models[0] if valid_models else st.session_state.available_models[0]
+        else:
+            st.session_state.selected_model = "meta-llama/Llama-3.1-8B-Instruct"
+    if "use_rag" not in st.session_state:
+        st.session_state.use_rag = False
 
 def create_sidebar_settings():
     """Create a well-organized settings panel in the sidebar"""
@@ -34,20 +42,36 @@ def create_sidebar_settings():
         # --- Model Configuration Section ---
         st.subheader("🤖 Model Configuration")
         
+        # Filter out connection error messages from model list
+        valid_models = [m for m in st.session_state.available_models if not m.startswith("Connection Error")]
+        if not valid_models:
+            valid_models = ["meta-llama/Llama-3.1-8B-Instruct"]
+        
+        # Find current model index or default to 0
+        current_index = 0
+        if st.session_state.selected_model in valid_models:
+            current_index = valid_models.index(st.session_state.selected_model)
+        
         selected_model = st.selectbox(
             "**Model**", 
-            st.session_state.available_models,
-            index=0,
+            valid_models,
+            index=current_index,
             key="sidebar_model",
             help="Select the language model to use for chat"
         )
         
+        # Update session state with selected model
+        st.session_state.selected_model = selected_model
+        
         use_rag = st.toggle(
             "**Enable RAG**", 
-            value=False, 
+            value=st.session_state.use_rag, 
             key="sidebar_rag",
             help="Enable Retrieval-Augmented Generation using your knowledge base"
         )
+        
+        # Update session state with RAG setting
+        st.session_state.use_rag = use_rag
         
         # RAG Status Indicator
         if use_rag:
@@ -62,11 +86,8 @@ def create_sidebar_settings():
             # Fetch and display files in vector database
             if "files_list" not in st.session_state:
                 try:
-                    res = requests.get(f"{API_URL}/files-in-vector-db")
-                    if res.status_code == 200:
-                        st.session_state.files_list = res.json()
-                    else:
-                        st.session_state.files_list = []
+                    files = chat_client.get_files_in_vector_db()
+                    st.session_state.files_list = files
                 except Exception as e:
                     st.session_state.files_list = []
                     st.error(f"Failed to fetch files: {e}")
@@ -75,16 +96,12 @@ def create_sidebar_settings():
             if st.button("📥 Ingest Knowledge Folder", key="sidebar_ingest", use_container_width=True):
                 with st.spinner("Ingesting documents..."):
                     try:
-                        res = requests.post(f"{API_URL}/ingest")
-                        if res.status_code == 200:
-                            data = res.json()
-                            st.success(f"✅ {data['files_processed']} file(s) processed")
-                            # Refresh file list after ingestion
-                            if "files_list" in st.session_state:
-                                del st.session_state.files_list
-                            st.rerun()
-                        else:
-                            st.error(f"❌ Error: {res.text}")
+                        response = chat_client.ingest_knowledge()
+                        st.success(f"✅ {response.files_processed} file(s) processed")
+                        # Refresh file list after ingestion
+                        if "files_list" in st.session_state:
+                            del st.session_state.files_list
+                        st.rerun()
                     except Exception as e:
                         st.error(f"❌ Connection failed: {e}")
             
@@ -156,8 +173,6 @@ def create_sidebar_settings():
         
         st.caption("Remove all messages from the current session")
 
-    return selected_model, use_rag
-
 def create_main_chat_ui():
     st.title("🦙 Llama Stack RAG Chat")
 
@@ -168,40 +183,38 @@ def create_main_chat_ui():
 
     # Chat Input - Process new messages
     if prompt := st.chat_input("What would you like to know?"):
+        # Validate that we have a valid model
+        if not st.session_state.selected_model or st.session_state.selected_model.startswith("Connection Error"):
+            st.error("⚠️ Please select a valid model from the sidebar settings.")
+            st.stop()
+        
         # Add user message to history
         st.session_state.messages.append({"role": "user", "content": prompt})
         
-        # Prepare Payload
-        payload = {
-            "message": prompt,
-            "model": selected_model,
-            "session_id": st.session_state.session_id,
-            "use_rag": use_rag
-        }
-
         # Call Backend - show spinner while waiting
         bot_response = None
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
                 try:
-                    response = requests.post(f"{API_URL}/chat", json=payload)
+                    response = chat_client.chat_message(
+                        message=prompt,
+                        model=st.session_state.selected_model,
+                        session_id=st.session_state.session_id,
+                        use_rag=st.session_state.use_rag
+                    )
+                    bot_response = response.response
+                    # Update Session ID (in case it was created new)
+                    st.session_state.session_id = response.session_id
                     
-                    if response.status_code == 200:
-                        data = response.json()
-                        bot_response = data["response"]
-                        # Update Session ID (in case it was created new)
-                        st.session_state.session_id = data["session_id"]
-                        
-                        # Display the response immediately
-                        st.markdown(bot_response)
-                    else:
-                        error_msg = f"Backend Error: {response.text}"
-                        bot_response = error_msg
-                        st.error(error_msg)
+                    # Display the response immediately
+                    st.markdown(bot_response)
                 except Exception as e:
-                    error_msg = f"Connection Error: {e}"
+                    error_msg = f"Error: {str(e)}"
                     bot_response = error_msg
                     st.error(error_msg)
+                    # Show more details in expander for debugging
+                    with st.expander("Error Details"):
+                        st.exception(e)
         
         # Add assistant response to history after displaying
         if bot_response:
@@ -210,5 +223,5 @@ def create_main_chat_ui():
             st.rerun()
 
 set_session_state()
-selected_model, use_rag = create_sidebar_settings()
+create_sidebar_settings()
 create_main_chat_ui()

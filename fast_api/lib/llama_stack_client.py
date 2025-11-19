@@ -1,7 +1,7 @@
 import requests
 
 class LlamaClient:
-    def __init__(self, base_url: str = "http://localhost:8000"):
+    def __init__(self, base_url: str = "http://localhost:8001"):
         self.base_url = base_url
 
     def get_models(self):

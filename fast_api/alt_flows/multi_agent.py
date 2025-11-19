@@ -5,7 +5,7 @@ import logging
 # --- 1. Define Your Local Tools ---
 # These are the functions your agent can "Act" with.
 
-from API.alt_flows.shared import get_llama_stack_client, get_function_specifications, get_tool_registry
+from fast_api.alt_flows.shared import get_llama_stack_client, get_function_specifications, get_tool_registry
 
 logger = logging.getLogger(__name__)
 

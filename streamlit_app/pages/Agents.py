@@ -12,23 +12,33 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Import API clients
+try:
+    from streamlit_app.lib.clients.crew_client import CrewClient
+    from streamlit_app.lib.clients.task_client import TaskClient, TaskBase
+    from streamlit_app.lib.clients.agent_client import AgentClient, AgentBase
+    API_CLIENTS_AVAILABLE = True
+except ImportError as e:
+    API_CLIENTS_AVAILABLE = False
+    logger.warning(f"API clients not available: {e}")
+
 # Import agent workflows (with optional imports for dependencies)
 try:
-    from API.alt_flows.multi_agent import run_agentic_workflow
+    from fast_api.alt_flows.multi_agent import run_agentic_workflow
     MULTI_AGENT_AVAILABLE = True
 except ImportError as e:
     MULTI_AGENT_AVAILABLE = False
     logger.warning(f"Multi-agent workflow not available: {e}")
 
 try:
-    from API.alt_flows.multi_agent_crewai import run_crewai_workflow
+    from fast_api.alt_flows.multi_agent_crewai import run_crewai_workflow
     CREWAI_AVAILABLE = True
 except ImportError as e:
     CREWAI_AVAILABLE = False
     logger.warning(f"CrewAI workflow not available: {e}")
 
 try:
-    from API.alt_flows.main import agent_1, agent_2
+    from fast_api.alt_flows.main import agent_1, agent_2
     LLAMA_STACK_AGENTS_AVAILABLE = True
 except ImportError as e:
     LLAMA_STACK_AGENTS_AVAILABLE = False
@@ -41,11 +51,24 @@ if "agent_messages" not in st.session_state:
     st.session_state.agent_messages = []
 if "agent_results" not in st.session_state:
     st.session_state.agent_results = []
+if "api_base_url" not in st.session_state:
+    st.session_state.api_base_url = os.getenv("FASTAPI_BASE_URL", "http://localhost:8001")
 
 def create_sidebar():
     """Create sidebar with agent selection and settings."""
     with st.sidebar:
         st.title("Agent Settings")
+        
+        # API Configuration
+        if API_CLIENTS_AVAILABLE:
+            st.subheader("API Configuration")
+            api_base_url = st.text_input(
+                "API Base URL",
+                value=st.session_state.api_base_url,
+                help="Base URL for the FastAPI backend"
+            )
+            st.session_state.api_base_url = api_base_url
+            st.divider()
         
         # Build available agent types list
         available_agents = []
@@ -253,6 +276,218 @@ def run_llama_stack_agent_rag():
             "result": None
         }
 
+def create_task_management_ui():
+    """Create UI for task and agent management using API clients."""
+    if not API_CLIENTS_AVAILABLE:
+        st.error("API clients are not available. Please check imports.")
+        return
+    
+    st.title("📋 Task & Agent Management")
+    st.markdown("Manage tasks and agents, and launch tasks using the API.")
+    
+    # Initialize clients
+    try:
+        task_client = TaskClient(base_url=st.session_state.api_base_url)
+        agent_client = AgentClient(base_url=st.session_state.api_base_url)
+        crew_client = CrewClient(base_url=st.session_state.api_base_url)
+    except Exception as e:
+        st.error(f"Failed to initialize API clients: {e}")
+        st.info("Make sure the FastAPI server is running and the base URL is correct.")
+        return
+    
+    # Create tabs for different sections
+    tab1, tab2, tab3, tab4 = st.tabs(["View Tasks", "View Agents", "Launch Task", "Create Task"])
+    
+    # Tab 1: View Tasks
+    with tab1:
+        st.subheader("Available Tasks")
+        try:
+            tasks = task_client.get_tasks()
+            if tasks:
+                for task in tasks:
+                    with st.expander(f"📝 {task.name} (ID: {task.id})"):
+                        st.write(f"**Description:** {task.description}")
+                        st.write(f"**Agent ID:** {task.agent_id}")
+                        st.write(f"**Expected Output:** {task.expected_output}")
+                        if task.dependencies:
+                            st.write(f"**Dependencies:** {', '.join(task.dependencies)}")
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.button(f"Delete Task", key=f"delete_task_{task.id}"):
+                                try:
+                                    deleted_task = task_client.delete_task(task.id)
+                                    st.success(f"Task '{deleted_task.name}' deleted successfully!")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Failed to delete task: {e}")
+            else:
+                st.info("No tasks available. Create a task in the 'Create Task' tab.")
+        except Exception as e:
+            st.error(f"Failed to fetch tasks: {e}")
+            st.info("Make sure the FastAPI server is running.")
+    
+    # Tab 2: View Agents
+    with tab2:
+        st.subheader("Available Agents")
+        try:
+            agents = agent_client.get_agents()
+            if agents:
+                for agent in agents:
+                    with st.expander(f"🤖 {agent.role} (ID: {agent.id})"):
+                        st.write(f"**Goal:** {agent.goal}")
+                        st.write(f"**Backstory:** {agent.backstory}")
+                        if agent.tools:
+                            st.write(f"**Tools:** {', '.join(agent.tools)}")
+                        st.write(f"**Verbose:** {agent.verbose}")
+                        st.write(f"**Allow Delegation:** {agent.allow_delegation}")
+            else:
+                st.info("No agents available. Create an agent in the 'Create Agent' page.")
+        except Exception as e:
+            st.error(f"Failed to fetch agents: {e}")
+            st.info("Make sure the FastAPI server is running.")
+    
+    # Tab 3: Launch Task
+    with tab3:
+        st.subheader("Launch Task with Agent")
+        try:
+            # Get available tasks and agents
+            tasks = task_client.get_tasks()
+            agents = agent_client.get_agents()
+            
+            if not tasks:
+                st.warning("No tasks available. Please create a task first.")
+            elif not agents:
+                st.warning("No agents available. Please create an agent first.")
+            else:
+                # Task selection
+                task_options = {f"{task.name} (ID: {task.id})": task.id for task in tasks}
+                selected_task_display = st.selectbox(
+                    "Select Task",
+                    options=list(task_options.keys())
+                )
+                selected_task_id = task_options[selected_task_display]
+                
+                # Agent selection
+                agent_options = {f"{agent.role} (ID: {agent.id})": agent.id for agent in agents}
+                selected_agent_display = st.selectbox(
+                    "Select Agent",
+                    options=list(agent_options.keys())
+                )
+                selected_agent_id = agent_options[selected_agent_display]
+                
+                # Display selected task and agent info
+                selected_task = next(t for t in tasks if t.id == selected_task_id)
+                selected_agent = next(a for a in agents if a.id == selected_agent_id)
+                
+                st.info(f"**Task:** {selected_task.name} - {selected_task.description}")
+                st.info(f"**Agent:** {selected_agent.role} - {selected_agent.goal}")
+                
+                if st.button("🚀 Launch Task", type="primary"):
+                    with st.spinner("Launching task..."):
+                        try:
+                            result = crew_client.launch_task_by_ids(
+                                task_id=selected_task_id,
+                                agent_id=selected_agent_id
+                            )
+                            
+                            st.success("✅ Task launched successfully!")
+                            st.subheader("Execution Result")
+                            st.write(f"**Task ID:** {result.task_id}")
+                            st.write(f"**Agent ID:** {result.agent_id}")
+                            st.write(f"**Status:** {result.status}")
+                            st.write(f"**Result:**")
+                            st.code(result.result, language='text')
+                            
+                            # Store in session state
+                            if "task_executions" not in st.session_state:
+                                st.session_state.task_executions = []
+                            st.session_state.task_executions.append({
+                                "task_id": result.task_id,
+                                "agent_id": result.agent_id,
+                                "status": result.status,
+                                "result": result.result
+                            })
+                        except Exception as e:
+                            st.error(f"Failed to launch task: {e}")
+                            import traceback
+                            with st.expander("View Error Details"):
+                                st.code(traceback.format_exc(), language='python')
+        except Exception as e:
+            st.error(f"Failed to load tasks/agents: {e}")
+            st.info("Make sure the FastAPI server is running.")
+    
+    # Tab 4: Create Task
+    with tab4:
+        st.subheader("Create New Task")
+        try:
+            # Get available agents for selection
+            agents = agent_client.get_agents()
+            
+            if not agents:
+                st.warning("No agents available. Please create an agent first in the 'Create Agent' page.")
+            else:
+                with st.form("create_task_form"):
+                    task_name = st.text_input("Task Name", placeholder="e.g., Research Market Trends")
+                    task_description = st.text_area(
+                        "Task Description",
+                        placeholder="e.g., Research and analyze current market trends in the technology sector",
+                        height=100
+                    )
+                    
+                    # Agent selection
+                    agent_options = {f"{agent.role} (ID: {agent.id})": agent.id for agent in agents}
+                    selected_agent_display = st.selectbox(
+                        "Assign Agent",
+                        options=list(agent_options.keys())
+                    )
+                    selected_agent_id = agent_options[selected_agent_display]
+                    
+                    expected_output = st.text_area(
+                        "Expected Output",
+                        placeholder="e.g., A comprehensive report on market trends with key insights",
+                        height=100
+                    )
+                    
+                    # Dependencies (optional)
+                    tasks = task_client.get_tasks()
+                    if tasks:
+                        dependency_options = {f"{task.name} (ID: {task.id})": task.id for task in tasks}
+                        selected_dependencies = st.multiselect(
+                            "Task Dependencies (optional)",
+                            options=list(dependency_options.keys())
+                        )
+                        dependency_ids = [dependency_options[dep] for dep in selected_dependencies]
+                    else:
+                        dependency_ids = []
+                    
+                    submitted = st.form_submit_button("Create Task", type="primary")
+                    
+                    if submitted:
+                        if not task_name or not task_description or not expected_output:
+                            st.error("Please fill in all required fields.")
+                        else:
+                            try:
+                                new_task = TaskBase(
+                                    name=task_name,
+                                    description=task_description,
+                                    agent_id=selected_agent_id,
+                                    expected_output=expected_output,
+                                    dependencies=dependency_ids
+                                )
+                                created_task = task_client.create_task(new_task)
+                                st.success(f"✅ Task '{created_task.name}' created successfully!")
+                                st.info(f"Task ID: {created_task.id}")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Failed to create task: {e}")
+                                import traceback
+                                with st.expander("View Error Details"):
+                                    st.code(traceback.format_exc(), language='python')
+        except Exception as e:
+            st.error(f"Failed to load agents: {e}")
+            st.info("Make sure the FastAPI server is running.")
+
 def create_main_ui():
     """Create the main agent triggering UI."""
     st.title("🤖 Agent Trigger")
@@ -364,5 +599,20 @@ def create_main_ui():
         
         st.rerun()
 
-create_main_ui()
+def main():
+    """Main entry point with tab navigation."""
+    # Create tabs for different views
+    if API_CLIENTS_AVAILABLE:
+        tab1, tab2 = st.tabs(["Workflow Agents", "Task & Agent Management"])
+        
+        with tab1:
+            create_main_ui()
+        
+        with tab2:
+            create_task_management_ui()
+    else:
+        # If API clients not available, just show the workflow UI
+        create_main_ui()
+
+main()
 

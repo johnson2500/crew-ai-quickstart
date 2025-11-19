@@ -14,25 +14,29 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # --- API Configuration ---
-API_URL = os.getenv("API_URL", "http://localhost:8000")
+API_URL = os.getenv("API_URL", "http://localhost:8001")
 
 # Import agent workflows (with optional imports for dependencies)
 try:
-    from API.alt_flows.multi_agent import run_agentic_workflow
+    print("Importing multi_agent")
+    from fast_api.alt_flows.multi_agent import run_agentic_workflow
     MULTI_AGENT_AVAILABLE = True
 except ImportError as e:
     MULTI_AGENT_AVAILABLE = False
     logger.warning(f"Multi-agent workflow not available: {e}")
 
 try:
-    from API.alt_flows.multi_agent_crewai import run_crewai_workflow
+    print("Importing multi_agent_crewai")
+    from fast_api.alt_flows.multi_agent_crewai import run_crewai_workflow
     CREWAI_AVAILABLE = True
 except ImportError as e:
     CREWAI_AVAILABLE = False
-    logger.warning(f"CrewAI workflow not available: {e}")
+    # Only log warning if it's not the expected missing module
+    if "custom_tool" not in str(e):
+        logger.warning(f"CrewAI workflow not available: {e}")
 
 try:
-    from API.alt_flows.main import agent_1, agent_2
+    from fast_api.alt_flows.main import agent_1, agent_2
     LLAMA_STACK_AGENTS_AVAILABLE = True
 except ImportError as e:
     LLAMA_STACK_AGENTS_AVAILABLE = False
@@ -381,22 +385,18 @@ def create_crewai_agent_ui():
     st.title("🏗️ Create CrewAI Agents & Tasks")
     st.markdown("Build custom CrewAI agents and tasks for your workflows.")
     
-    # Refresh button to fetch from API
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.info(f"💡 **API Endpoint:** {API_URL}")
-    with col2:
-        if st.button("🔄 Refresh from API"):
-            st.rerun()
+    # # Refresh button to fetch from API
+    # col1, col2 = st.columns([3, 1])
+    # with col1:
+    #     st.info(f"💡 **API Endpoint:** {API_URL}")
+    # with col2:
+    #     if st.button("🔄 Refresh from API"):
+    #         st.rerun()
     
     # Tabs for Agents and Tasks
     tab1, tab2 = st.tabs(["🤖 Agents", "📋 Tasks"])
     
     with tab1:
-        st.subheader("Create New Agent")
-
-        st.info("💡 **Tip:** This form is based on creating agents for CrewAI workflows. See the CrewAI documentation for more information.")
-        
         with st.form("create_agent_form", clear_on_submit=True):
             col1, col2 = st.columns(2)
             
@@ -562,40 +562,6 @@ def create_crewai_agent_ui():
                             st.code(task.get('id', 'N/A'), language='text')
             else:
                 st.info("No tasks found. Create one above!")
-    
-    # Export/Import section
-    st.divider()
-    st.subheader("💾 Export/Import Configuration")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if st.button("📥 Export Configuration"):
-            config = {
-                "agents": st.session_state.crewai_agents,
-                "tasks": st.session_state.crewai_tasks
-            }
-            st.download_button(
-                label="Download JSON",
-                data=json.dumps(config, indent=2),
-                file_name="crewai_config.json",
-                mime="application/json"
-            )
-    
-    with col2:
-        uploaded_file = st.file_uploader("📤 Import Configuration", type=["json"])
-        if uploaded_file is not None:
-            try:
-                config = json.load(uploaded_file)
-                if "agents" in config and "tasks" in config:
-                    st.session_state.crewai_agents = config["agents"]
-                    st.session_state.crewai_tasks = config["tasks"]
-                    st.success("✅ Configuration imported successfully!")
-                    st.rerun()
-                else:
-                    st.error("Invalid configuration file format.")
-            except json.JSONDecodeError:
-                st.error("Invalid JSON file.")
     
     # Clear all button
     if st.session_state.crewai_agents or st.session_state.crewai_tasks:
